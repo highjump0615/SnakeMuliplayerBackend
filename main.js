@@ -18,8 +18,8 @@ function main() {
 
         let app = new App();
         let gs = new GS(conf.addr, app, conf.register);
-        let pushHander = gs.start();
-        app.setPushHander(pushHander);
+        let pushHandler = gs.start();
+        app.setPushHandler(pushHandler);
         
         const log = log4js.getLogger();
         log.info('Game server started, listen on:', conf.addr);
