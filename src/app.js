@@ -1,5 +1,9 @@
 const log4js = require('log4js');
 const textEncoding = require('text-encoding');
+var glb = require("./global");
+
+const FoodInfo = require('./model/foodinfo');
+const Helpers = require('./helpers/helpers');
 
 const log = log4js.getLogger();
 
@@ -13,15 +17,16 @@ class App {
      * @memberof App
      */
     constructor() {
+        this.foodList = [];
     }
 
     /**
      * 设置推送handler
-     * @param {Object} pushHander 
+     * @param {Object} pushHandler 
      * @memberof App
      */
-    setPushHander(pushHander){
-        this.pushHander = pushHander;
+    setPushHandler(pushHandler){
+        this.pushHandler = pushHandler;
     }
 
     /**
@@ -45,6 +50,29 @@ class App {
      */
     onCreateRoom(request) {
         log.debug('onCreateRoom:', request);
+
+        // clear food list
+        this.foodList = [];
+
+        //
+        // generate foods
+        //
+        var timestamp = parseInt(new Date().getTime() / 1000);
+
+        for (var i = 0; i < glb.FOOD_INIT_COUNT; i++) {
+            // randomize position
+            var x = Math.random() * glb.GROUND_WIDTH - glb.GROUND_WIDTH / 2;
+            var y = Math.random() * glb.GROUND_HEIGHT - glb.GROUND_HEIGHT / 2;
+
+            var foodNew = new FoodInfo(x, y);
+            // generate id
+            foodNew.id = Helpers.stringPad(timestamp, 11) + Helpers.stringPad(i + 1, 3) + '1' + '000000';
+
+            this.foodList.push(foodNew);
+        }
+
+        this.gameID = request.gameID;
+        this.roomID = request.roomID;
     }
 
     /**
@@ -147,9 +175,56 @@ class App {
      * @param {Uint8Array} request.cpProto 自定义消息内容
      * @memberof App
      */
-    onReceiveEvent(request) {
-        log.debug('onReceiveEvent:', request);
-        this.examplePush(request);
+    onReceiveEvent(request) {        
+        let content = new textEncoding.TextDecoder("utf-8").decode(request.cpProto);
+
+        log.debug('onReceiveEvent:', content);
+
+        let event = JSON.parse(content);
+        var userID = request.userID;
+
+        if (!userID || !event) {
+            return;
+        }
+
+        log.info('game id:', this.gameID);
+        log.info('room id:', this.roomID);
+        log.info('user id:', userID);
+        
+        let action = event.action;
+        switch (action) {
+            case glb.GAME_START_EVENT: {
+
+                var nIndex = 0;
+                var foods = [];
+
+                while (nIndex < this.foodList.length) {
+
+                    foods.push(this.foodList[nIndex].toObject());
+                    nIndex++;
+
+                    if ((nIndex % glb.FOOD_TRANSFER_COUNT == 0) || (nIndex == this.foodList.length)) {
+                        // send food init event
+                        let event = {
+                            action: glb.FOOD_INIT_EVENT,
+                            foods: foods,
+                        }
+                        this.sendEventTo(event, userID);                
+
+                        // clear foods array
+                        foods = [];
+                    }
+                }
+
+                break;
+            }
+
+            default:
+                log.warn('unknown action:', action);
+                break;
+        }
+
+        // this.examplePush(request);
     }
 
     /**
@@ -189,6 +264,40 @@ class App {
         log.debug('onSetRoomProperty:', request);
     }
 
+
+    /**
+     *  推送房间消息
+     * @param {Object} event
+     * @memberof Room
+     */
+    sendEvent(event) {
+        let content = new textEncoding.TextEncoder("utf-8").encode(JSON.stringify(event));
+        this.pushHandler.pushEvent({
+            gameID: this.gameID, 
+            roomID: this.roomID, 
+            pushType: 3,
+            content: content,
+        });
+    }
+
+    /**
+     *  Push event to specific user
+     * @param {Object} event
+     * @memberof Room
+     */
+    sendEventTo(event, userId) {
+        log.info('send event to:', JSON.stringify(event));
+        let content = new textEncoding.TextEncoder("utf-8").encode(JSON.stringify(event));
+
+        this.pushHandler.pushEvent({
+            gameID: this.gameID, 
+            roomID: this.roomID, 
+            destsList: [userId],
+            pushType: 1,
+            content: content,
+        });        
+    }
+
     examplePush(request) {
         let content = new textEncoding.TextDecoder("utf-8").decode(request.cpProto);
         let args = content.split('|');
@@ -196,14 +305,14 @@ class App {
         switch (cmd) {
             case 'joinover':
                 log.debug('examplePush msg:', cmd);
-                this.pushHander.joinOver({
+                this.pushHandler.joinOver({
                     gameID: request.gameID, 
                     roomID: request.roomID,
                 });
                 break;
             case 'joinopen':
                 log.debug('examplePush msg:', cmd);
-                this.pushHander.joinOpen({
+                this.pushHandler.joinOpen({
                     gameID: request.gameID, 
                     roomID: request.roomID,
                 });
@@ -212,7 +321,7 @@ class App {
                 let destID = args[1];
                 log.debug('examplePush msg:', cmd)
                 if (destID) {
-                    this.pushHander.kickPlayer({
+                    this.pushHandler.kickPlayer({
                         roomID: request.roomID,
                         destID: destID,
                     });
@@ -220,7 +329,7 @@ class App {
                 break;
             case 'roomDetail':
                 log.debug('examplePush msg:', cmd);
-                this.pushHander.getRoomDetail({
+                this.pushHandler.getRoomDetail({
                     gameID: request.gameID, 
                     roomID: request.roomID,
                 });
@@ -230,14 +339,14 @@ class App {
                 log.debug('examplePush msg:', cmd);
                 if (msg) {
                     let roomProperty = new textEncoding.TextEncoder("utf-8").encode(msg);
-                    this.pushHander.setRoomProperty({
+                    this.pushHandler.setRoomProperty({
                         gameID: request.gameID,
                         roomID: request.roomID,
                         roomProperty: roomProperty,
                     });
                 }
             default:
-                this.pushHander.pushEvent({
+                this.pushHandler.pushEvent({
                     gameID: request.gameID, 
                     roomID: request.roomID, 
                     pushType: 3, 
