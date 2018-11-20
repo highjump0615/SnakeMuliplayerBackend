@@ -2,7 +2,8 @@ const log4js = require('log4js');
 const textEncoding = require('text-encoding');
 var glb = require("./global");
 
-const FoodInfo = require('./foodinfo');
+const FoodInfo = require('./model/foodinfo');
+const Helpers = require('./helpers/helpers');
 
 const log = log4js.getLogger();
 
@@ -56,13 +57,17 @@ class App {
         //
         // generate foods
         //
+        var timestamp = parseInt(new Date().getTime() / 1000);
+
         for (var i = 0; i < glb.FOOD_INIT_COUNT; i++) {
             // randomize position
-            var x = Math.random() * glb.GROUND_WIDTH;
-            var y = Math.random() * glb.GROUND_HEIGHT;
+            var x = Math.random() * glb.GROUND_WIDTH - glb.GROUND_WIDTH / 2;
+            var y = Math.random() * glb.GROUND_HEIGHT - glb.GROUND_HEIGHT / 2;
 
             var foodNew = new FoodInfo(x, y);
-            foodNew.id = this.foodList.length;
+            // generate id
+            foodNew.id = Helpers.stringPad(timestamp, 11) + Helpers.stringPad(i + 1, 3) + '1' + '000000';
+
             this.foodList.push(foodNew);
         }
 

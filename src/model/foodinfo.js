@@ -3,7 +3,8 @@ const Point = require('./point');
 class FoodInfo {
 
     constructor(posX, posY) {
-        this.id = -1;
+        // timestamp(11) + seqnum(3) + weight(1) + userid(6)
+        this.id = "";
         this.point = new Point(posX, posY);
     }
 
